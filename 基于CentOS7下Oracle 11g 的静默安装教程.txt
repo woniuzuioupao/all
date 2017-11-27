@@ -1,0 +1,406 @@
+﻿基于CentOS7下Oracle 11g 的静默安装教程(无图形界面，远程安装)
+
+参考文件:
+http://blog.51cto.com/canonind/1883066
+
+
+一、安装前准备
+1、下载 linux.x64_11gR2_database_1of2.zip和linux.x64_11gR2_database_2of2.zip文件
+2、上传到linux服务器下的/tmp/目录下
+
+二、操作系统环境的准备工作
+1、使用root用户登录操作系统
+2、关闭selinux
+[root@CentOS tmp]# vim /etc/selinux/config
+
+设置SELINUX=disabled
+
+[root@CentOS tmp]# setenforce 0
+
+3、关闭防火墙
+
+[root@CentOS tmp]# service iptables stop
+
+[root@CentOS ~]# systemctl stop firewalld
+
+[root@CentOS ~]# systemctl disable firewalld
+
+4、在/etc/hosts文件中添加主机名
+
+添加192.168.1.111 CentOS(根据实际情况处理)
+
+5、安装Oracle 11g依赖包
+
+[root@CentOS tmp]# yum install gcc make binutils gcc-c++ compat-libstdc++-33elfutils-libelf-devel elfutils-libelf-devel-static ksh libaio libaio-develnumactl-devel sysstat unixODBC unixODBC-devel pcre-devel –y
+
+6、添加安装用户和用户组
+
+[root@CentOS tmp]# groupadd oinstall
+
+[root@CentOS tmp]# groupadd dba
+
+[root@CentOS tmp]# useradd -g oinstall -G dba oracle
+
+[root@CentOS tmp]# passwd oracle
+
+[root@CentOS tmp]# id oracle
+
+7、修改内核参数配置文件
+
+[root@CentOS ~]# vim /etc/sysctl.conf
+
+添加以下内容
+
+ 
+
+fs.aio-max-nr = 1048576
+
+fs.file-max = 6815744
+
+kernel.shmall = 2097152
+
+kernel.shmmax = 1073741824
+
+kernel.shmmni = 4096
+
+kernel.sem = 250 32000 100 128
+
+net.ipv4.ip_local_port_range = 9000 65500
+
+net.core.rmem_default = 262144
+
+net.core.rmem_max = 4194304
+
+net.core.wmem_default = 262144
+
+net.core.wmem_max = 1048576
+
+ 
+
+[root@CentOS ~]# sysctl -p
+
+ 
+
+其中kernel.shmmax = 1073741824为本机物理内存（2G）的一半，单位为byte(根据实际情况调整)
+
+
+8、修改用户的限制文件
+
+(1)修改limits.conf文件
+[root@CentOS ~]# vim /etc/security/limits.conf
+
+添加以下内容
+
+oracle           soft    nproc           2047
+
+oracle           hard    nproc           16384
+
+oracle           soft    nofile          1024
+
+oracle           hard    nofile         65536
+
+oracle           soft    stack           10240
+
+(2)修改/etc/pam.d/login文件：
+
+[root@CentOS ~]# vim /etc/pam.d/login
+
+ 
+
+添加以下内容：
+
+ 
+
+session required  /lib64/security/pam_limits.so
+
+session required   pam_limits.so
+
+ 
+
+(3)修改/etc/profile文件：
+
+[root@CentOS ~]# vim /etc/profile
+
+ 
+
+添加以下内容：
+
+ 
+
+if [ $USER = "oracle" ]; then
+
+  if[ $SHELL = "/bin/ksh" ]; then
+
+  ulimit -p 16384
+
+  ulimit -n 65536
+
+ else
+
+  ulimit -u 16384 -n 65536
+
+  fi
+
+fi
+
+
+
+9、 创建安装目录和设置文件权限
+
+
+
+[root@CentOS ~]# mkdir -p /data/oracle/product/11.2.0
+
+[root@CentOS ~]# mkdir /data/oracle/oradata
+
+[root@CentOS ~]# mkdir /data/oracle/inventory
+
+[root@CentOS ~]# mkdir /data/oracle/fast_recovery_area
+
+[root@CentOS ~]# chown -R oracle:oinstall /data/oracle
+
+[root@CentOS ~]# chmod -R 775 /data/oracle
+
+10、设置oracle用户环境变量
+
+[root@CentOS ~]# su - oracle
+
+[oracle@CentOS ~]$ vim .bash_profile
+
+添加如下内容：
+
+ 
+
+ORACLE_BASE=/data/oracle
+
+ORACLE_HOME=$ORACLE_BASE/product/11.2.0
+
+ORACLE_SID=orcl
+
+PATH=$PATH:$ORACLE_HOME/bin
+
+export ORACLE_BASE ORACLE_HOME ORACLE_SIDPATH
+
+ 
+
+注意，ORACLE_SID=orcl必须与创建的数据库实例名称一致，否则数据库启动后无法访问。
+
+11、在/tmp 目录下解压文件
+
+[root@CentOS tmp]#unzip linux.x64_11gR2_database_1of2.zip && unzip linux.x64_11gR2_database_2of2.zip
+
+等待解压完成后，会在/tmp 目录下生产一个database文件夹，里面就Oracle11g安装文件
+
+12、编辑静默安装响应文件
+
+[oracle@CentOS ~]$ cp -R /tmp/database/response/ .
+
+[oracle@CentOS ~]$ cd response/
+
+[oracle@CentOS response]$ vi db_install.rsp
+
+ 
+
+需要设置的选项如下：
+
+ 
+
+oracle.install.option=INSTALL_DB_SWONLY
+
+ORACLE_HOSTNAME=CentOS
+#真实主机名(根据实际情况处理)
+
+UNIX_GROUP_NAME=oinstall
+
+INVENTORY_LOCATION=/data/oracle/inventory
+
+SELECTED_LANGUAGES=en,zh_CN
+
+ORACLE_HOME=/data/oracle/product/11.2.0
+
+ORACLE_BASE=/data/oracle
+
+oracle.install.db.InstallEdition=EE
+
+oracle.install.db.DBA_GROUP=dba
+
+oracle.install.db.OPER_GROUP=dba
+
+DECLINE_SECURITY_UPDATES=true
+
+二、安装Oracle11g
+
+1、根据响应文件静默安装
+
+[oracle@CentOS response]$ cd /tmp/database/
+
+[oracle@CentOS database]$  ./runInstaller -silent -responseFile /home/oracle/response/db_install.rsp -ignorePrereq
+
+如果执行以上命令出错，会提示有参数格式，按照提示参数格式修改修改即可
+
+开始Oracle在后台静默安装。安装过程中，如果提示[WARNING]不必理会，此时安装程序仍在后台进行，如果出现[FATAL]，则安装程序已经停止了。
+
+可以在以下位置找到本次安装会话的日志:
+
+/data/oracle/inventory/logs/installActionsxxxxxxxxxxxxxxxx.log
+
+可以新开一个终端执行top命令查看后台进程是否在安装，/data/oracle/目录也在不断增大，
+或者 tail -f /data/oracle/inventory/logs/installActionsxxxxxxxxxxxxxxxx.log 观察输出日志
+
+当出现提示root用户运行脚本的时候，代表安装成功：
+
+
+Successfully Setup Software.
+
+2、按照要求执行脚本。
+
+打开终端，以root身份登录，执行脚本：
+
+[root@CentOS~]# /data/oracle/inventory/db_1/orainstRoot.sh  (提示没有这个文件，就不需要执行)
+
+[root@CentOS~]#  /data/oracle/product/11.2.0/db_1/root.sh
+
+
+三、以静默方式配置监听
+
+[oracle@CentOS database]$ netca /silent /responseFile /home/oracle/response/netca.rsp
+
+注意此处，必须使用/silent /responseFile格式，而不是-silent -responseFile，因为是静默安装
+
+成功运行后，在/data/oracle/product/11.2.0/db_1/network/admin/中生成listener.ora和sqlnet.ora
+
+通过netstat命令可以查看1521端口正在监听。
+[root@CentOS~]# netstat -tnlp | grep 1521
+
+
+四、以静默方式建立新库，同时也建立一个对应的实例。
+
+1、编制建立新库的静默响应文件
+[oracle@CentOS~]$ vim /home/oracle/response/dbca.rsp
+
+设置以下参数：
+
+GDBNAME= "orcl"
+
+SID ="orcl"
+
+SYSPASSWORD= "pmmppassword"
+
+SYSTEMPASSWORD= "pmmppassword"
+
+SYSMANPASSWORD= "pmmppassword"
+
+DBSNMPPASSWORD= "pmmppassword"
+
+DATAFILEDESTINATION=/data/oracle/oradata
+
+RECOVERYAREADESTINATION=/data/oracle/fast_recovery_area
+
+CHARACTERSET= "ZHS16GBK"
+
+TOTALMEMORY= "3276"
+
+ 
+
+其中TOTALMEMORY ="3276" 为3276MB，物理内存4G*80%。
+
+
+2、执行建库命令
+[oracle@CentOS~]$ dbca -silent -responseFile /data/oracle/response/dbca.rsp
+
+会有文本提示进度
+
+3、建库后进行实例进程检查：
+
+[oracle@CentOS~]$ ps -ef | grep ora_ | grep -v grep
+
+会看到很多oracle的进程
+
+4、查看监听状态：
+
+[oracle@CentOS~]$ lsnrctl status
+
+
+5、登录查看实例状态：
+
+[oracle@CentOS~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 11.2.0.1.0 Production on Fri Nov 24 19:32:37 2017
+
+Copyright (c) 1982, 2009, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 11g Enterprise Edition Release 11.2.0.1.0 - 64bit Production
+With the Partitioning, OLAP, Data Mining and Real Application Testing options
+
+SQL> select status from v$instance;
+
+STATUS
+------------
+OPEN
+
+SQL> 
+
+ 
+五、异常情况处理
+(一)、没有swap分区
+
+解决办法：
+1、dd 命令 创建swap用的分区文件 /var/swap
+
+
+dd if=/dev/zero of=/var/swap bs=1M count=4000
+
+分区大小设为4g
+
+mkswap /var/swap
+mkswap -f /var/swap
+
+2、将文件变成swap分区
+
+swapon /var/swap
+
+3、设为开机自动启用
+
+vi /etc/fstab
+
+/var/swap           swap                    swap defaults 0 0
+
+
+(二)、没有oracle进程
+
+解决办法：
+    1、删除/etc/oratab 文件，重新安装。
+
+(三)、提示没有某些.so动态库的时候
+
+执行命令：
+[oracle@CentOS~]$ $ORACLE_HOME/bin/relink all
+
+(三)、用navicate工具连接数据库，提示ora-01031:insufficient privileges
+
+解决办法：在sqlnet.ora 增加货修改为：
+SQLNET.AUTHENTICATION_SERVICES = (BEQ,NONE)
+
+(四)、用navicate工具连接数据库，提示ORA-28547错误
+更换oci.dll版本，注意navicate是否支持64位的dll.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
