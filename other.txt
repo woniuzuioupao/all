@@ -3,3 +3,6 @@ http://www.zixue.it
 https://m.weibo.cn/status/4200263374326708?wm=3333_2001&from=1081093010&sourcetype=qq&featurecode=newtitle
 
 https://greasyfork.org/zh-CN/scripts
+
+
+http://tampermonkey.net/scripts.php
