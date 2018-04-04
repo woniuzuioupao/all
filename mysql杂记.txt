@@ -29,3 +29,27 @@ mysql定时器的使用
 
 	-- 查看我的定时器
 	SELECT * from mysql.`event`
+
+
+
+mysql定时器的使用
+
+	drop TRIGGER mytrigger1;
+	DELIMITER ||
+	CREATE TRIGGER mytrigger1 BEFORE INSERT
+	ON aaa for EACH ROW
+	BEGIN
+	SET new.time3=TIMESTAMPDIFF(DAY,DATE_FORMAT(new.time2,'%Y-%c-%d'),DATE_FORMAT(NOW(),'%Y-%c-%d'))+1;
+	END ||
+	DELIMITER ;
+
+	drop TRIGGER mytrigger2;
+	DELIMITER ||
+	CREATE TRIGGER mytrigger2 BEFORE UPDATE 
+	ON aaa for EACH ROW
+	BEGIN
+	SET new.time3=TIMESTAMPDIFF(DAY,DATE_FORMAT(new.time2,'%Y-%c-%d'),DATE_FORMAT(NOW(),'%Y-%c-%d'))+1;
+	END ||
+	DELIMITER ;
+
+	SELECT * FROM information_schema.`TRIGGERS`
