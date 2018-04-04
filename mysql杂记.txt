@@ -1,0 +1,31 @@
+
+mysql定时器的使用
+
+	-- 查看mysql定时器是否开启
+	SHOW VARIABLES LIKE '%sche%';
+	-- 设置mysql定时器开启（0关闭，1开启）
+	SET GLOBAL event_scheduler = 1;
+
+
+	-- 删除存储过程
+	DROP PROCEDURE hy_pro;
+	-- 创建存储过程
+	create procedure hy_pro()
+	BEGIN
+	UPDATE aaa SET time3=TIMESTAMPDIFF(DAY,DATE_FORMAT(time2,'%Y-%c-%d'),DATE_FORMAT(NOW(),'%Y-%c-%d'))+1;
+	end;
+
+	-- 删除定时器
+	DROP EVENT a_blog;
+	-- 创建定时器
+	CREATE EVENT IF NOT EXISTS a_blog
+	ON SCHEDULE  EVERY 1 DAY STARTS '2018-04-01 00:00:00'
+	ON COMPLETION PRESERVE
+	DO CALL hy_pro();
+
+
+	ALTER EVENT a_blog ON  COMPLETION PRESERVE ENABLE;   -- 开启事件
+	ALTER EVENT a_blog ON  COMPLETION PRESERVE DISABLE;  -- 关闭事件
+
+	-- 查看我的定时器
+	SELECT * from mysql.`event`
